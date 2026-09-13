@@ -1,0 +1,29 @@
+# Decompiled game code (Iron Gate's copyright) - never publish. Produce your own with ILSpy/dnSpy.
+assembly_valheim/
+assembly_valheim.sln
+
+# World saves (private, large)
+TheCapitolCorrupt/
+TheCapitolCorrupt_repaired/
+TheCapitolCorrupt_restored/
+*.chunk
+*.chunks
+*.db
+*.db2
+*.fwl
+*.fwl2
+*.ok
+cacheMinimap*
+
+# IDE chat logs
+.specstory/
+
+# Build output
+DeepNorthTerrainFix/bin/
+DeepNorthTerrainFix/obj/
+**/bin/
+**/obj/
+*.user
+.vs/
+__pycache__/
+*.pyc

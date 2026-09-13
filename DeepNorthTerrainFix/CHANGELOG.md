@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2
+
+- Server-side ghost purge (`PurgeGhostTerrainOps`, on by default): any ZDO whose prefab is a self-destructing
+  terrain op is removed on world load, the moment it arrives over the network, and during the periodic sweep.
+  The server has the prefab table, so this works with no client mod installed. These ZDOs are always garbage:
+  the stroke was already applied, and every client that spawns one re-applies it and is left with a dead
+  instance that blocks "area ready" until the owner leaves the zone.
+- A single modded client with `ClientMayHeal` on also purges them in its area (it claims ownership first).
+
 ## 1.1.1
 
 - New `dntf_zdos <zoneX> <zoneY> [radius]`: lists every object type in a zone as the running game sees it,

@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>DeepNorthTerrainFix</AssemblyName>
     <RootNamespace>DeepNorthTerrainFix</RootNamespace>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <Authors>FlorpyDorp</Authors>
     <Company>FlorpyDorp</Company>
     <Product>DeepNorthTerrainFix</Product>

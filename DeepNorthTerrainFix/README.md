@@ -40,6 +40,19 @@ folder from before it happened (the mod only stops it happening again).
 
 Back up your world folder before the first run. The mod changes world data.
 
+**Who needs it.** Each part of the fix runs where the problem lives:
+
+| problem | server only | one modded client | every client |
+|---|---|---|---|
+| duplicate compilers deleting terraforming | healed as they arrive and on load (a one-tick race remains) | healed in that player's area | prevented at the source |
+| dead stroke objects that trap players in portals | removed the moment they arrive, and on load | removed in that player's area | never created |
+| portal hang escape (25 s timeout) | no | that player only | yes |
+| double-applied border strokes (snow ridges) | no | that player's strokes only | yes |
+| network budget / snow sync throttling | server half | that player's half | yes |
+
+So: server alone stops the terraforming loss and the portal trap for everyone. Everyone installed is the
+full fix.
+
 ## Console commands
 
 Type in the dedicated server console, or in the F5 console as the host of a local game. A joined client can
@@ -66,7 +79,8 @@ Zone coordinates: zone X = round(worldX / 64), zone Y = round(worldZ / 64). `dnt
 | Heal | HealOnArrival | true | dedupe a zone the moment a new compiler ZDO arrives |
 | Heal | HealPeriodically / HealIntervalSeconds | true / 120 | server/host full scan |
 | Heal | MergeDuplicateData | true | union the duplicate's vertices into the survivor before removal |
-| Heal | ClientMayHeal | true | let joined clients run the arrival heal too |
+| Heal | ClientMayHeal | true | let joined clients run the arrival heal and ghost purge too |
+| Heal | PurgeGhostTerrainOps | true | remove ZDOs whose prefab is a self-destructing terrain op (on load, on arrival, periodic sweep) |
 | Terrain | FixDuplicateCompilers, MergeOnDedupe, ReuseExistingCompilerZdo | true | client-side prevention |
 | Terrain | SkipUnownedNeighborSpread, FixDoubleAppliedBorderStrokes | true | seam prevention |
 | Terrain | CleanupNetworkedTerrainOps | true | a stroke object that carries a network view is destroyed properly instead of leaving a dead ZDO that blocks "area ready" |

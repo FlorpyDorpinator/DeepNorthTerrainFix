@@ -4,6 +4,58 @@ using UnityEngine;
 
 namespace DeepNorthTerrainFix
 {
+    /// <summary>
+    /// Ghost terrain ops: a ZDO whose prefab is a self-destructing terrain op (hoe/shovel stroke object). Such a ZDO is
+    /// always garbage: the stroke was applied by whoever created it, the object destroys itself in Awake, and every
+    /// client that later spawns the ZDO re-applies the stroke and leaves the dead instance that blocks "area ready".
+    /// The server has the prefab table, so it can recognise and remove them without any client mod.
+    /// </summary>
+    internal static class GhostOps
+    {
+        private static readonly Dictionary<int, bool> s_isOp = new Dictionary<int, bool>();
+
+        public static bool IsTerrainOpPrefab(int hash)
+        {
+            if (s_isOp.TryGetValue(hash, out bool v)) return v;
+            bool result = false;
+            try
+            {
+                var go = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(hash) : null;
+                result = go != null && go.GetComponent<TerrainOp>() != null;
+            }
+            catch { }
+            if (ZNetScene.instance != null) s_isOp[hash] = result; // only cache once prefabs are available
+            return result;
+        }
+
+        public static void ResetCache() => s_isOp.Clear();
+
+        /// <summary>Removes every terrain-op ZDO in the given sector list. Returns how many were removed.</summary>
+        public static int PurgeList(List<ZDO> list)
+        {
+            if (list == null || list.Count == 0) return 0;
+            List<ZDO> victims = null;
+            foreach (var zdo in list)
+            {
+                if (!IsTerrainOpPrefab(zdo.GetPrefab())) continue;
+                (victims ??= new List<ZDO>()).Add(zdo);
+            }
+            if (victims == null) return 0;
+            foreach (var zdo in victims) Compilers.Remove(zdo);
+            return victims.Count;
+        }
+
+        /// <summary>Whole-world purge (world load / console). Iterates every sector once.</summary>
+        public static int PurgeAll(ZDOMan man)
+        {
+            var sectors = Compilers.SectorLists(man);
+            if (sectors == null) return 0;
+            int n = 0;
+            for (int i = 0; i < sectors.Length; i++) n += PurgeList(sectors[i]);
+            return n;
+        }
+    }
+
     /// <summary>Live-world diagnostics: what is actually in a zone right now, including objects that never reach the save.</summary>
     internal static class Diagnostics
     {

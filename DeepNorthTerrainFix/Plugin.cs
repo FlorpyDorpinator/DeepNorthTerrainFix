@@ -21,7 +21,7 @@ namespace DeepNorthTerrainFix
     {
         public const string GUID = "FlorpyDorp.DeepNorthTerrainFix";
         public const string NAME = "DeepNorthTerrainFix";
-        public const string VERSION = "1.1.1";
+        public const string VERSION = "1.1.2";
         public const string AUTHOR = "FlorpyDorp";
 
         internal static ManualLogSource Log;
@@ -41,6 +41,7 @@ namespace DeepNorthTerrainFix
         internal static ConfigEntry<bool> SkipUnownedNeighborSpread;
         internal static ConfigEntry<bool> FixDoubleAppliedBorderStrokes;
         internal static ConfigEntry<bool> CleanupNetworkedTerrainOps;
+        internal static ConfigEntry<bool> PurgeGhostTerrainOps;
 
         // Teleport
         internal static ConfigEntry<bool> TeleportHardTimeout;
@@ -92,6 +93,9 @@ namespace DeepNorthTerrainFix
             CleanupNetworkedTerrainOps = Config.Bind("Terrain", "CleanupNetworkedTerrainOps", true,
                 "Client: if a terrain-op prefab (hoe/shovel stroke object) carries a network view, destroy it through the scene so it does not leave a dead, non-persistent ZDO behind. Such ZDOs block 'area ready' for every arriving player until their owner leaves the zone, and never appear in saves.");
 
+            PurgeGhostTerrainOps = Config.Bind("Heal", "PurgeGhostTerrainOps", true,
+                "Server / host (and clients with ClientMayHeal): remove any ZDO whose prefab is a self-destructing terrain op (hoe/shovel stroke object). Such ZDOs are always garbage: the stroke was already applied, and every client that spawns the ZDO re-applies it and is left with a dead instance that blocks 'area ready'. Removed on world load, the moment one arrives over the network, and during the periodic sweep.");
+
             TeleportHardTimeout = Config.Bind("Teleport", "HardTimeout", true,
                 "Client: finish a teleport after HardTimeoutSeconds even if the destination never reports 'ready'. Vanilla waits forever if any object around the target cannot be instantiated.");
             TeleportHardTimeoutSeconds = Config.Bind("Teleport", "HardTimeoutSeconds", 25f,
@@ -138,17 +142,32 @@ namespace DeepNorthTerrainFix
         internal static void OnWorldLoaded()
         {
             OnSessionStart();
-            if (!HealOnWorldLoad.Value || ZDOMan.instance == null) return;
-            try
+            if (ZDOMan.instance == null) return;
+            if (HealOnWorldLoad.Value)
             {
-                var r = SaveHealer.DedupeAll(ZDOMan.instance, MergeDuplicateData.Value);
-                foreach (var line in r.Lines) Log.LogWarning("[heal on load] " + line);
-                Log.LogInfo(r.Summary("[heal on load]"));
-                if (r.Removed > 0) Log.LogWarning("Duplicate terrain compilers were removed; the fix is persisted with the next world save.");
+                try
+                {
+                    var r = SaveHealer.DedupeAll(ZDOMan.instance, MergeDuplicateData.Value);
+                    foreach (var line in r.Lines) Log.LogWarning("[heal on load] " + line);
+                    Log.LogInfo(r.Summary("[heal on load]"));
+                    if (r.Removed > 0) Log.LogWarning("Duplicate terrain compilers were removed; the fix is persisted with the next world save.");
+                }
+                catch (Exception e)
+                {
+                    Log.LogError("Heal on load failed: " + e);
+                }
             }
-            catch (Exception e)
+            if (PurgeGhostTerrainOps.Value)
             {
-                Log.LogError("Heal on load failed: " + e);
+                try
+                {
+                    int n = GhostOps.PurgeAll(ZDOMan.instance);
+                    if (n > 0) Log.LogWarning($"[heal on load] removed {n} ghost terrain-op ZDO(s) from the save");
+                }
+                catch (Exception e)
+                {
+                    Log.LogError("Ghost terrain-op purge on load failed: " + e);
+                }
             }
         }
 
@@ -158,6 +177,13 @@ namespace DeepNorthTerrainFix
             if (!s_knownCompilers.Add(compiler.m_uid)) return; // already seen this compiler
             long key = Compilers.ZoneKey(compiler.GetSector());
             if (s_pendingZoneKeys.Add(key)) s_pendingZones.Enqueue(key);
+        }
+
+        private static readonly Queue<ZDO> s_pendingGhostOps = new Queue<ZDO>();
+
+        internal static void EnqueueGhostOp(ZDO zdo)
+        {
+            if (s_pendingGhostOps.Count < 4096) s_pendingGhostOps.Enqueue(zdo);
         }
 
         private void Update()
@@ -191,6 +217,24 @@ namespace DeepNorthTerrainFix
                 s_pendingZoneKeys.Clear();
             }
 
+            // Ghost terrain ops that just arrived: remove them before any client spawns them.
+            if (s_pendingGhostOps.Count > 0)
+            {
+                if (authority || ClientMayHeal.Value)
+                {
+                    int removed = 0;
+                    while (s_pendingGhostOps.Count > 0 && removed < 256)
+                    {
+                        var zdo = s_pendingGhostOps.Dequeue();
+                        if (zdo == null || !zdo.IsValid()) continue;
+                        try { Compilers.Remove(zdo); removed++; }
+                        catch (Exception e) { Log.LogError("Ghost terrain-op removal failed: " + e); }
+                    }
+                    if (removed > 0) Log.LogInfo($"[heal on arrival] removed {removed} ghost terrain-op ZDO(s)");
+                }
+                else s_pendingGhostOps.Clear();
+            }
+
             // Periodic scan on the authority only, sliced over the sector lists so a big world never hitches.
             if (!authority || !HealPeriodically.Value) return;
             if (s_sweepCursor < 0)
@@ -209,7 +253,13 @@ namespace DeepNorthTerrainFix
                 for (int i = s_sweepCursor; i < end; i++)
                 {
                     var list = sectors[i];
-                    if (list == null || list.Count < 2) continue;
+                    if (list == null || list.Count == 0) continue;
+                    if (PurgeGhostTerrainOps.Value)
+                    {
+                        int g = GhostOps.PurgeList(list);
+                        if (g > 0) { s_sweepGhosts += g; }
+                    }
+                    if (list.Count < 2) continue;
                     int compilers = 0;
                     for (int k = 0; k < list.Count; k++) if (list[k].GetPrefab() == Compilers.PrefabHash) compilers++;
                     if (compilers < 2) continue;
@@ -220,8 +270,9 @@ namespace DeepNorthTerrainFix
                 s_sweepCursor = end;
                 if (s_sweepCursor >= sectors.Length)
                 {
-                    if (s_sweepFound > 0) Log.LogInfo($"[periodic heal] sweep done, {s_sweepFound} zone(s) repaired");
+                    if (s_sweepFound > 0 || s_sweepGhosts > 0) Log.LogInfo($"[periodic heal] sweep done, {s_sweepFound} zone(s) repaired, {s_sweepGhosts} ghost terrain-op ZDO(s) removed");
                     s_sweepCursor = -1;
+                    s_sweepGhosts = 0;
                 }
             }
             catch (Exception e)
@@ -234,6 +285,7 @@ namespace DeepNorthTerrainFix
         private const int SweepSlice = 8192;
         private static int s_sweepCursor = -1;
         private static int s_sweepFound;
+        private static int s_sweepGhosts;
     }
 
     internal static class EnumerableExt

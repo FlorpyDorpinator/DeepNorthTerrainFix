@@ -34,18 +34,22 @@ namespace DeepNorthTerrainFix
         private static void Postfix(ZDOMan __instance)
         {
             TerrainComp_Awake_Patch.ResetSession();
+            GhostOps.ResetCache();
             Plugin.OnSessionStart();
             __instance.m_onZDODestroyed += TerrainComp_Awake_Patch.OnZDODestroyed;
         }
     }
 
-    /// <summary>Whenever a compiler ZDO arrives over the network, queue its zone for a duplicate check.</summary>
+    /// <summary>Whenever a compiler ZDO arrives over the network, queue its zone for a duplicate check; whenever a
+    /// ghost terrain-op ZDO arrives, queue it for removal.</summary>
     [HarmonyPatch(typeof(ZDO), nameof(ZDO.Deserialize))]
     internal static class ZDO_Deserialize_Patch
     {
         private static void Postfix(ZDO __instance)
         {
-            if (__instance.GetPrefab() == Compilers.PrefabHash) Plugin.EnqueueZoneCheck(__instance);
+            int prefab = __instance.GetPrefab();
+            if (prefab == Compilers.PrefabHash) Plugin.EnqueueZoneCheck(__instance);
+            else if (Plugin.PurgeGhostTerrainOps.Value && GhostOps.IsTerrainOpPrefab(prefab)) Plugin.EnqueueGhostOp(__instance);
         }
     }
 

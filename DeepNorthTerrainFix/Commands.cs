@@ -101,7 +101,33 @@ namespace DeepNorthTerrainFix
                     Print(args, n > 0 ? $"reset {n} compiler(s) in zone {zx},{zy}; terrain there returns to world generation" : $"zone {zx},{zy} has no terrain compiler");
                 }, isCheat: false, isNetwork: true, onlyServer: true, remoteCommand: true);
 
-            Plugin.Log.LogInfo("Console commands registered: dntf_scan, dntf_zone, dntf_fix, dntf_seams, dntf_reset");
+            new Terminal.ConsoleCommand("dntf_zdos", "<zoneX> <zoneY> [radius] - DeepNorthTerrainFix: list every object type in a zone as the running game sees it (includes non-persistent objects that never reach the save)",
+                delegate (Terminal.ConsoleEventArgs args)
+                {
+                    if (!Ready(args)) return;
+                    if (args.Length < 3 || !int.TryParse(args[1], out int zx) || !int.TryParse(args[2], out int zy))
+                    {
+                        Print(args, "usage: dntf_zdos <zoneX> <zoneY> [radius]   (dntf_zone prints your current zone)");
+                        return;
+                    }
+                    int radius = args.Length > 3 && int.TryParse(args[3], out int r) ? Math.Max(0, r) : 0;
+                    foreach (var line in Diagnostics.ZoneCensus(ZDOMan.instance, new Vector2s(zx, zy), radius)) Print(args, line);
+                }, isCheat: false, isNetwork: true);
+
+            new Terminal.ConsoleCommand("dntf_purge", "<zoneX> <zoneY> <prefabName|hash> [radius] - DeepNorthTerrainFix: remove NON-persistent objects of one prefab from a zone (never touches buildings or anything saved; runs on the server)",
+                delegate (Terminal.ConsoleEventArgs args)
+                {
+                    if (!Ready(args) || !Allowed(args)) return;
+                    if (args.Length < 4 || !int.TryParse(args[1], out int zx) || !int.TryParse(args[2], out int zy))
+                    {
+                        Print(args, "usage: dntf_purge <zoneX> <zoneY> <prefabName|hash> [radius]");
+                        return;
+                    }
+                    int radius = args.Length > 4 && int.TryParse(args[4], out int r) ? Math.Max(0, r) : 0;
+                    foreach (var line in Diagnostics.PurgeNonPersistent(ZDOMan.instance, new Vector2s(zx, zy), radius, args[3])) Print(args, line);
+                }, isCheat: false, isNetwork: true, onlyServer: true, remoteCommand: true);
+
+            Plugin.Log.LogInfo("Console commands registered: dntf_scan, dntf_zone, dntf_zdos, dntf_fix, dntf_seams, dntf_reset, dntf_purge");
         }
 
         private static bool Ready(Terminal.ConsoleEventArgs args)

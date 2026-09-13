@@ -21,7 +21,7 @@ namespace DeepNorthTerrainFix
     {
         public const string GUID = "FlorpyDorp.DeepNorthTerrainFix";
         public const string NAME = "DeepNorthTerrainFix";
-        public const string VERSION = "1.1.0";
+        public const string VERSION = "1.1.1";
         public const string AUTHOR = "FlorpyDorp";
 
         internal static ManualLogSource Log;
@@ -40,6 +40,7 @@ namespace DeepNorthTerrainFix
         internal static ConfigEntry<bool> ReuseExistingCompilerZdo;
         internal static ConfigEntry<bool> SkipUnownedNeighborSpread;
         internal static ConfigEntry<bool> FixDoubleAppliedBorderStrokes;
+        internal static ConfigEntry<bool> CleanupNetworkedTerrainOps;
 
         // Teleport
         internal static ConfigEntry<bool> TeleportHardTimeout;
@@ -87,6 +88,9 @@ namespace DeepNorthTerrainFix
                 "Client: do not write edge-spread paint into a neighbouring zone's compiler unless this client owns it (vanilla writes it locally and silently fails to save it, so the seam differs per player until it snaps back).");
             FixDoubleAppliedBorderStrokes = Config.Bind("Terrain", "FixDoubleAppliedBorderStrokes", true,
                 "Client: a hoe/shovel stroke that overlaps two zones is applied to both zones AND copied across the border, so the shared border column gets the stroke twice (a ridge/trench along the zone line in Deep North snow). Skip the copy when the neighbour zone receives the stroke itself.");
+
+            CleanupNetworkedTerrainOps = Config.Bind("Terrain", "CleanupNetworkedTerrainOps", true,
+                "Client: if a terrain-op prefab (hoe/shovel stroke object) carries a network view, destroy it through the scene so it does not leave a dead, non-persistent ZDO behind. Such ZDOs block 'area ready' for every arriving player until their owner leaves the zone, and never appear in saves.");
 
             TeleportHardTimeout = Config.Bind("Teleport", "HardTimeout", true,
                 "Client: finish a teleport after HardTimeoutSeconds even if the destination never reports 'ready'. Vanilla waits forever if any object around the target cannot be instantiated.");

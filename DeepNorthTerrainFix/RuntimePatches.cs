@@ -279,6 +279,49 @@ namespace DeepNorthTerrainFix
     }
 
     // ------------------------------------------------------------------------------------------------
+    // 3b. Self-destructing terrain ops that carry a network view leave a "created but dead" ZDO behind:
+    //     TerrainOp.Awake ends with UnityEngine.Object.Destroy(gameObject), and ZNetView.OnDestroy neither
+    //     unregisters the instance nor destroys the ZDO. That ZDO is non-persistent (never saved), blocks
+    //     ZNetScene.IsAreaReady for every arriving player, and is only removed when its owner leaves the area.
+    //     Route such objects through ZNetScene.Destroy instead, which resets and destroys the ZDO properly.
+    //     Both Awake orders are covered: whichever component wakes second sees the other one present.
+    // ------------------------------------------------------------------------------------------------
+    internal static class NetworkedTerrainOpCleanup
+    {
+        private static readonly AccessTools.FieldRef<ZNetView, bool> f_ghost = AccessTools.FieldRefAccess<ZNetView, bool>("m_ghost");
+
+        internal static void TryCleanup(GameObject go, ZNetView view)
+        {
+            if (!Plugin.CleanupNetworkedTerrainOps.Value) return;
+            if (TerrainOp.m_forceDisableTerrainOps) return;            // build-menu placement ghost
+            if (view == null || !view.IsValid() || f_ghost(view)) return;
+            if (ZNetScene.instance == null) return;
+            var zdo = view.GetZDO();
+            Plugin.Log.LogWarning($"Terrain op '{go.name}' carries a ZNetView (zdo {zdo.m_uid}, persistent={zdo.Persistent}); destroying it through ZNetScene so no dead ZDO is left behind.");
+            ZNetScene.instance.Destroy(go);
+        }
+    }
+
+    [HarmonyPatch(typeof(TerrainOp), "Awake")]
+    internal static class TerrainOp_Awake_Patch
+    {
+        private static void Postfix(TerrainOp __instance)
+        {
+            var view = __instance.GetComponent<ZNetView>();
+            if (view != null) NetworkedTerrainOpCleanup.TryCleanup(__instance.gameObject, view);
+        }
+    }
+
+    [HarmonyPatch(typeof(ZNetView), "Awake")]
+    internal static class ZNetView_Awake_Patch
+    {
+        private static void Postfix(ZNetView __instance)
+        {
+            if (__instance.GetComponent<TerrainOp>() != null) NetworkedTerrainOpCleanup.TryCleanup(__instance.gameObject, __instance);
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------
     // 4. Player.UpdateTeleport: hard timeout
     // ------------------------------------------------------------------------------------------------
     [HarmonyPatch(typeof(Player), "UpdateTeleport")]

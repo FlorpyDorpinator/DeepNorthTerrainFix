@@ -53,6 +53,8 @@ adminlist (results appear in the server console/log).
 | `dntf_fix [nomerge]` | Merges and removes duplicate compilers in the whole world. |
 | `dntf_seams [heights\|paint\|both] [zoneX zoneY radius]` | Makes every shared border vertex agree across the zones that own it (one-sided edits are copied across, conflicting ones averaged, corners resolved once). Whole world unless a centre zone and radius are given. A host can also type `dntf_seams both 3` for 3 zones around their character. |
 | `dntf_reset <zoneX> <zoneY>` | Wipes one zone's terrain modifications. Buildings stay. Terrain returns to world generation. |
+| `dntf_zdos <zoneX> <zoneY> [radius]` | Lists every object type in a zone as the running game sees it: prefab name, count, how many are non-persistent (never saved), owners, and on a client how many are stuck as "created but dead" (the state that blocks portals). Local, read-only. |
+| `dntf_purge <zoneX> <zoneY> <prefab> [radius]` | Removes non-persistent objects of one prefab (name or hash from `dntf_zdos`) from a zone. Never touches buildings or anything that is saved. |
 
 Zone coordinates: zone X = round(worldX / 64), zone Y = round(worldZ / 64). `dntf_zone` does it for you.
 
@@ -67,6 +69,7 @@ Zone coordinates: zone X = round(worldX / 64), zone Y = round(worldZ / 64). `dnt
 | Heal | ClientMayHeal | true | let joined clients run the arrival heal too |
 | Terrain | FixDuplicateCompilers, MergeOnDedupe, ReuseExistingCompilerZdo | true | client-side prevention |
 | Terrain | SkipUnownedNeighborSpread, FixDoubleAppliedBorderStrokes | true | seam prevention |
+| Terrain | CleanupNetworkedTerrainOps | true | a stroke object that carries a network view is destroyed properly instead of leaving a dead ZDO that blocks "area ready" |
 | Teleport | HardTimeout / HardTimeoutSeconds | true / 25 | portal hang escape |
 | Network | PatchNetworkBudget, SteamSendRateBytesPerSec, ZdoInFlightBudgetBytes | true / 512000 / 30720 | vanilla 153600 / 10240 |
 | Snow | ThrottleSnowWrites / SnowWriteStep | true / 0.05 | piece snow-buildup sync |

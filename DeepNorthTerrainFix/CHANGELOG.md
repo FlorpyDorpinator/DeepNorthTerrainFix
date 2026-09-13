@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1
+
+- New `dntf_zdos <zoneX> <zoneY> [radius]`: lists every object type in a zone as the running game sees it,
+  with prefab names, persistent/non-persistent counts, owners, and (on a client) how many are stuck as
+  "created but dead". Non-persistent objects never reach the save, so this is the only way to see them.
+- New `dntf_purge <zoneX> <zoneY> <prefab> [radius]`: removes non-persistent objects of one prefab from a
+  zone. Never touches anything persistent (buildings, chests, terrain data).
+- New safety net `CleanupNetworkedTerrainOps`: a terrain-op object that carries a network view is destroyed
+  through the scene when it self-destructs, so it cannot leave a dead ZDO that blocks "area ready" for every
+  arriving player until its owner leaves the zone.
+
 ## 1.1.0
 
 First public release, by FlorpyDorp.

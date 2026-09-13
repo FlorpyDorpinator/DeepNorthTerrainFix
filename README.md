@@ -13,7 +13,7 @@ hard seams in the snow along zone borders. This repository holds:
 | [release/](release/) | the packaged Thunderstore zip and an upload checklist |
 | [tools/](tools/) | Python tools: a byte-exact `.chunk` / terrain-block parser and an offline save repair script |
 | [BUG_REPORT.md](BUG_REPORT.md) | the developer-facing bug report, every claim verified against the decompiled 1.0.12 code |
-| [FINDINGS_storm_fx_and_snow_seams.md](FINDINGS_storm_fx_and_snow_seams.md) | why the storm wind effect shows indoors and why snow terrain has seams |
+| [FINDINGS_snow_seams.md](FINDINGS_snow_seams.md) | why Deep North snow terrain has seams and steps, and what the mod does about it |
 
 The decompiled game source the analysis cites (`assembly_valheim/...`) is **not** in this repository, since
 it's Iron Gate's code. Decompile `assembly_valheim.dll` from your own install with ILSpy or dnSpy into an

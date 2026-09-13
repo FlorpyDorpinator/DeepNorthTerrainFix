@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3
+
+- Documentation only: the listing now says up front that installing on the server alone is enough and
+  players need nothing, and explains how to use the commands without console access (admin + F5).
+- No code changes; same behaviour as 1.1.2.
+
 ## 1.1.2
 
 - Server-side ghost purge (`PurgeGhostTerrainOps`, on by default): any ZDO whose prefab is a self-destructing

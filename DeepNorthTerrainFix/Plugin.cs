@@ -21,7 +21,7 @@ namespace DeepNorthTerrainFix
     {
         public const string GUID = "FlorpyDorp.DeepNorthTerrainFix";
         public const string NAME = "DeepNorthTerrainFix";
-        public const string VERSION = "1.1.2";
+        public const string VERSION = "1.1.3";
         public const string AUTHOR = "FlorpyDorp";
 
         internal static ManualLogSource Log;

@@ -6,8 +6,11 @@ Fixes the Valheim 1.0 Deep North bug where a zone's terraforming vanishes, playe
 or on the login screen while someone is standing in that zone, the terrain flickers between two shapes, and
 hard seams appear along zone borders in the snow.
 
-Works as a **server mod** (heals the world you already have and stops new damage from arriving) and as a
-**client mod** (stops the damage at the source). Install on both for full protection. One DLL for both.
+**Server owners: drop it on the server and you're done. Your players do not need to install anything.**
+The server heals the world it already has, removes duplicate compilers and dead stroke objects the moment
+they appear, and vanilla clients keep connecting as normal; nothing about the network protocol changes.
+Players *may* also install it on their own game for extras (a 25 s portal escape, prevention at the source,
+the snow-ridge fix for their own strokes), but that is optional. One DLL works in both places.
 
 ## What it does
 
@@ -33,12 +36,28 @@ folder from before it happened (the mod only stops it happening again).
 ## Install
 
 1. Install [BepInExPack for Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) on the
-   dedicated server and on every client.
+   dedicated server (most hosting panels have a one-click BepInEx option).
 2. Drop `DeepNorthTerrainFix.dll` into `BepInEx/plugins/`.
-3. Start the server once. The log shows `[heal on load]` lines for every zone it repaired. Type `save` in
-   the server console (or wait for the autosave) to persist it.
+3. Restart the server. That's it. The log (`BepInEx/LogOutput.log`) shows `[heal on load]` lines for every
+   zone it repaired, and the repaired world is written at the next autosave (every 30 minutes) or when an
+   admin saves.
+
+Players can optionally install the same DLL on their own game for the client-side extras.
 
 Back up your world folder before the first run. The mod changes world data.
+
+## No console access? (most hosting panels)
+
+You don't need the console. Everything important is automatic: heal on load, removal of duplicates and dead
+stroke objects as they arrive, and a background sweep every two minutes. The console commands below are
+diagnostics and manual tools.
+
+If you do want them without console access, install the mod on your own game too and put your Steam ID in the
+server's `adminlist.txt` (your host's file manager can edit it; the ID is the 17-digit number the server log
+prints next to your name). Then, in game, press F5 and type the command. `dntf_fix`, `dntf_seams`,
+`dntf_reset` and `dntf_purge` are forwarded to the server and executed there for admins; their output goes to
+the server log. `dntf_scan`, `dntf_zone` and `dntf_zdos` run on your own game and print in your console.
+Vanilla's `save` typed in F5 also saves the server world when you're an admin.
 
 **Who needs it.** Each part of the fix runs where the problem lives:
 

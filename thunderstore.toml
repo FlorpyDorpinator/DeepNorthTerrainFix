@@ -12,8 +12,8 @@ repository = "https://thunderstore.io"
 [package]
 namespace = "FlorpyDorp"
 name = "DeepNorthTerrainFix"
-versionNumber = "1.1.2"
-description = "Heals duplicate terrain compilers that delete Deep North terraforming, trap players in portals and cause snow seams. Server + client."
+versionNumber = "1.1.3"
+description = "Fixes lost Deep North terraforming, portal hangs and snow seams caused by duplicate terrain compilers. Install on the server only; players need nothing (client install optional)."
 websiteUrl = "https://github.com/FlorpyDorpinator/DeepNorthTerrainFix"
 containsNsfwContent = false
 

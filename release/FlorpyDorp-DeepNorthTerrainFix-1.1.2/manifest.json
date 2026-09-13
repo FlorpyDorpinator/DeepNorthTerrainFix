@@ -1,9 +1,0 @@
-{
-  "name": "DeepNorthTerrainFix",
-  "version_number": "1.1.2",
-  "website_url": "https://github.com/FlorpyDorpinator/DeepNorthTerrainFix",
-  "description": "Heals duplicate terrain compilers that delete Deep North terraforming, trap players in portals and cause snow seams. Server + client.",
-  "dependencies": [
-    "denikson-BepInExPack_Valheim-5.4.2202"
-  ]
-}

@@ -1,0 +1,45 @@
+# Thunderstore CLI (tcli) configuration.
+# Publish the already-built release zip with:
+#   tcli publish --config-path thunderstore.toml --file release/FlorpyDorp-DeepNorthTerrainFix-<version>.zip --token <service account token>
+# Or set TCLI_AUTH_TOKEN in the environment and omit --token.
+
+[config]
+schemaVersion = "0.0.1"
+
+[general]
+repository = "https://thunderstore.io"
+
+[package]
+namespace = "FlorpyDorp"
+name = "DeepNorthTerrainFix"
+versionNumber = "1.1.2"
+description = "Heals duplicate terrain compilers that delete Deep North terraforming, trap players in portals and cause snow seams. Server + client."
+websiteUrl = "https://github.com/FlorpyDorpinator/DeepNorthTerrainFix"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2202"
+
+[build]
+icon = "./DeepNorthTerrainFix/icon.png"
+readme = "./DeepNorthTerrainFix/README.md"
+outdir = "./release"
+
+[[build.copy]]
+source = "./DeepNorthTerrainFix/bin/Release/netstandard2.1/DeepNorthTerrainFix.dll"
+target = "/"
+
+[[build.copy]]
+source = "./DeepNorthTerrainFix/CHANGELOG.md"
+target = "/"
+
+[[build.copy]]
+source = "./DeepNorthTerrainFix/LICENSE"
+target = "/"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "server-side", "client-side", "utility"]

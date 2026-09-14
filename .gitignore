@@ -31,3 +31,14 @@ __pycache__/
 # world save downloads
 Lost Shield/
 Latest Save/
+
+# sibling mods (own repos)
+IndoorStormFix/
+NetFixes/
+
+# other mods packaged from this workspace
+release/FlorpyDorp-IndoorStormFix-*
+release/FlorpyDorp-NetFixes-*
+dist/IndoorStormFix.dll
+dist/NetFixes.dll
+.vscode/

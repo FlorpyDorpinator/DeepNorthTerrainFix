@@ -27,3 +27,6 @@ DeepNorthTerrainFix/obj/
 .vs/
 __pycache__/
 *.pyc
+
+# world save downloads
+Lost Shield/

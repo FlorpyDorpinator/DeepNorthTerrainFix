@@ -40,16 +40,95 @@ namespace DeepNorthTerrainFix
         }
     }
 
-    /// <summary>Whenever a compiler ZDO arrives over the network, queue its zone for a duplicate check; whenever a
-    /// ghost terrain-op ZDO arrives, queue it for removal.</summary>
+    /// <summary>Whenever a compiler ZDO arrives over the network, check its zone for duplicates (synchronously on the
+    /// server, queued on clients); whenever a ghost terrain-op ZDO arrives, queue it for removal.</summary>
     [HarmonyPatch(typeof(ZDO), nameof(ZDO.Deserialize))]
     internal static class ZDO_Deserialize_Patch
     {
         private static void Postfix(ZDO __instance)
         {
             int prefab = __instance.GetPrefab();
-            if (prefab == Compilers.PrefabHash) Plugin.EnqueueZoneCheck(__instance);
+            if (prefab == Compilers.PrefabHash) Plugin.OnCompilerArrived(__instance);
             else if (Plugin.PurgeGhostTerrainOps.Value && GhostOps.IsTerrainOpPrefab(prefab)) Plugin.EnqueueGhostOp(__instance);
+        }
+    }
+
+    /// <summary>
+    /// Server: a ZDO the healer has already decided to destroy is never forwarded to a peer. ZDOMan.Update sends new
+    /// ZDOs to peers before it processes its own destroy list, so without this every removed duplicate still reaches
+    /// every other player for one frame, and their (unmodded) game runs the vanilla Awake fight against it.
+    /// </summary>
+    [HarmonyPatch]
+    internal static class ZDOPeer_ShouldSend_Patch
+    {
+        private static MethodBase TargetMethod()
+        {
+            var peerType = AccessTools.Inner(typeof(ZDOMan), "ZDOPeer");
+            return peerType == null ? null : AccessTools.Method(peerType, "ShouldSend", new[] { typeof(ZDO) });
+        }
+
+        private static bool Prefix(ZDO zdo, ref bool __result)
+        {
+            if (zdo == null || Compilers.SendSuppressed.Count == 0 || !Compilers.SendSuppressed.Contains(zdo.m_uid)) return true;
+            __result = false;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Server: refuse a client's request to destroy the richest terrain compiler of a zone. An unmodded client sends
+    /// exactly that when a duplicate compiler wakes up on its screen while it owns the original (TerrainComp.Awake
+    /// destroys "the other one", and ZNetScene.Destroy makes it permanent for the owner). The ZDO is kept, its owner
+    /// is cleared, and it is re-sent to every peer so the game that dropped it gets it straight back. Destroys of
+    /// anything else, and of compilers that have an equal or richer twin in the zone, pass through untouched.
+    /// </summary>
+    [HarmonyPatch(typeof(ZDOMan), "RPC_DestroyZDO")]
+    internal static class ZDOMan_RPC_DestroyZDO_Patch
+    {
+        private static readonly Dictionary<ZDOID, int> s_refused = new Dictionary<ZDOID, int>();
+
+        internal static void ResetSession() => s_refused.Clear();
+
+        private static bool Prefix(ZDOMan __instance, long sender, ref ZPackage pkg)
+        {
+            if (!Plugin.ProtectRichestCompiler.Value || !Compilers.IsServer || pkg == null) return true;
+            if (sender == ZDOMan.GetSessionID()) return true; // our own healer / vanilla destroys
+            int start = pkg.GetPos();
+            int n;
+            try { n = pkg.ReadInt(); }
+            catch { pkg.SetPos(start); return true; }
+            var keep = new List<ZDOID>(n);
+            bool refusedAny = false;
+            for (int i = 0; i < n; i++)
+            {
+                ZDOID id = pkg.ReadZDOID();
+                ZDO zdo = __instance.GetZDO(id);
+                if (zdo != null && zdo.GetPrefab() == Compilers.PrefabHash && Compilers.IsProtected(__instance, zdo))
+                {
+                    refusedAny = true;
+                    try
+                    {
+                        zdo.SetOwner(0L);
+                        __instance.ForceSendZDO(id);
+                    }
+                    catch (Exception e) { Plugin.Log.LogError($"Protecting compiler {id} failed: {e}"); }
+                    s_refused.TryGetValue(id, out int count);
+                    s_refused[id] = ++count;
+                    if (count <= 5 || count % 50 == 0)
+                    {
+                        var zone = zdo.GetSector();
+                        Plugin.Log.LogWarning($"[protect] refused destroy of terrain compiler {Compilers.Describe(zdo)} in zone {zone.x},{zone.y} requested by peer {sender} (x{count}); re-sent to all peers");
+                    }
+                }
+                else keep.Add(id);
+            }
+            if (!refusedAny) { pkg.SetPos(start); return true; }
+            var rebuilt = new ZPackage();
+            rebuilt.Write(keep.Count);
+            foreach (var id in keep) rebuilt.Write(id);
+            rebuilt.SetPos(0);
+            pkg = rebuilt;
+            return true;
         }
     }
 
@@ -81,7 +160,9 @@ namespace DeepNorthTerrainFix
 
         internal static void OnZDODestroyed(ZDO zdo)
         {
-            if (zdo != null) s_pendingDestroy.Remove(zdo.m_uid);
+            if (zdo == null) return;
+            s_pendingDestroy.Remove(zdo.m_uid);
+            Compilers.SendSuppressed.Remove(zdo.m_uid);
         }
 
         private static bool Prefix(TerrainComp __instance)

@@ -11,17 +11,19 @@ namespace DeepNorthTerrainFix
     /// <summary>
     /// DeepNorthTerrainFix
     ///  Heals:   duplicate _TerrainCompiler ZDOs inside the loaded world (on load, on arrival, periodically, on command).
-    ///  Prevents: new duplicates being created, the original being deleted, endless create/destroy loops, portal hangs,
-    ///            double-applied border strokes, snow-buildup network spam.
-    /// Install on the server (healing + prevention of arriving duplicates) and on every client (prevention where
-    /// terrain objects are actually instantiated). One DLL for both.
+    ///  Protects: the server refuses a client's destroy of the richest compiler of a zone and never forwards a
+    ///            duplicate it is about to remove, so an unmodded player can no longer delete real terraforming.
+    ///  Prevents: new duplicates being created, endless create/destroy loops, portal hangs, double-applied border
+    ///            strokes, snow-buildup network spam (client side).
+    /// Install on the server (healing + protection) and optionally on clients (prevention where terrain objects are
+    /// actually instantiated). One DLL for both.
     /// </summary>
     [BepInPlugin(GUID, NAME, VERSION)]
     public class Plugin : BaseUnityPlugin
     {
         public const string GUID = "FlorpyDorp.DeepNorthTerrainFix";
         public const string NAME = "DeepNorthTerrainFix";
-        public const string VERSION = "1.1.3";
+        public const string VERSION = "1.2.0";
         public const string AUTHOR = "FlorpyDorp";
 
         internal static ManualLogSource Log;
@@ -33,6 +35,7 @@ namespace DeepNorthTerrainFix
         internal static ConfigEntry<float> HealIntervalSeconds;
         internal static ConfigEntry<bool> MergeDuplicateData;
         internal static ConfigEntry<bool> ClientMayHeal;
+        internal static ConfigEntry<bool> ProtectRichestCompiler;
 
         // Terrain
         internal static ConfigEntry<bool> FixDuplicateCompilers;
@@ -69,7 +72,7 @@ namespace DeepNorthTerrainFix
             HealOnWorldLoad = Config.Bind("Heal", "HealOnWorldLoad", true,
                 "Server / host: right after the world is loaded, merge and remove duplicate terrain compilers in every zone. The result is saved with the next world save.");
             HealOnArrival = Config.Bind("Heal", "HealOnArrival", true,
-                "When a terrain compiler ZDO arrives over the network for a zone that already has one, merge it into the existing one and remove it before it can fight the original.");
+                "When a terrain compiler ZDO arrives over the network for a zone that already has one, merge it into the existing one and remove it. On the server this happens the instant it arrives, before it can be forwarded to any other player.");
             HealPeriodically = Config.Bind("Heal", "HealPeriodically", true,
                 "Server / host: scan the whole world for duplicate compilers every HealIntervalSeconds.");
             HealIntervalSeconds = Config.Bind("Heal", "HealIntervalSeconds", 120f,
@@ -78,6 +81,8 @@ namespace DeepNorthTerrainFix
                 "When removing a duplicate, copy any terrain vertices it modified that the survivor did not into the survivor.");
             ClientMayHeal = Config.Bind("Heal", "ClientMayHeal", true,
                 "Allow a non-host client to run the arrival heal too (it claims ownership of the duplicate to remove it). Harmless if the server also runs this mod; useful if it does not.");
+            ProtectRichestCompiler = Config.Bind("Heal", "ProtectRichestCompiler", true,
+                "Server: refuse a client's request to destroy the terrain compiler that holds a zone's terraforming when no other compiler in that zone has as much data. An unmodded game sends exactly that request when a duplicate compiler appears on its screen while it owns the real one; vanilla then deletes every hoe and shovel stroke in the zone. The compiler is kept and re-sent to everyone instead. Keep this on.");
 
             FixDuplicateCompilers = Config.Bind("Terrain", "FixDuplicateCompilers", true,
                 "Client: when two terrain compiler objects exist for one zone, keep the one with the most terrain data and remove the other (claiming ownership so the removal propagates). Vanilla removes whichever was created first, which destroys real terraforming and loops create/destroy on non-owning clients.");
@@ -101,8 +106,8 @@ namespace DeepNorthTerrainFix
             TeleportHardTimeoutSeconds = Config.Bind("Teleport", "HardTimeoutSeconds", 25f,
                 new ConfigDescription("Seconds after which a teleport is forced to complete.", new AcceptableValueRange<float>(10f, 120f)));
 
-            PatchNetworkBudget = Config.Bind("Network", "PatchNetworkBudget", true,
-                "Raise the Steam socket send-rate cap and the per-peer ZDO in-flight budget. Install on server and clients for full effect.");
+            PatchNetworkBudget = Config.Bind("Network", "PatchNetworkBudget", false,
+                "Raise the Steam socket send-rate cap and the per-peer ZDO in-flight budget. Off by default since 1.2.0: on a server it pushes more data at every player, and a player with a weak upload or a congested link then sees delayed hits and rubber-banding. Only enable it if every player has plenty of bandwidth.");
             SteamSendRateBytesPerSec = Config.Bind("Network", "SteamSendRateBytesPerSec", 512000,
                 new ConfigDescription("Steam networking SendRateMin/Max (vanilla 153600 = 150 KB/s).", new AcceptableValueRange<int>(153600, 2000000)));
             ZdoInFlightBudgetBytes = Config.Bind("Network", "ZdoInFlightBudgetBytes", 30720,
@@ -137,6 +142,8 @@ namespace DeepNorthTerrainFix
             s_pendingZoneKeys.Clear();
             s_pendingZones.Clear();
             s_sweepCursor = -1;
+            Compilers.ResetSession();
+            ZDOMan_RPC_DestroyZDO_Patch.ResetSession();
         }
 
         internal static void OnWorldLoaded()
@@ -171,10 +178,31 @@ namespace DeepNorthTerrainFix
             }
         }
 
-        internal static void EnqueueZoneCheck(ZDO compiler)
+        /// <summary>
+        /// A compiler ZDO was deserialized from the network. The first time we see each one, check its zone.
+        /// On the server this must happen right here, synchronously: ZDOMan.Update forwards fresh ZDOs to every
+        /// other peer before it runs its destroy list, so a duplicate handled one frame later has already reached
+        /// every player (and an unmodded owner of the real compiler reacts to it by destroying the real one).
+        /// Clients queue the check and run it from Update, because their removal needs an ownership claim anyway.
+        /// </summary>
+        internal static void OnCompilerArrived(ZDO compiler)
         {
-            if (!HealOnArrival.Value) return;
+            if (!HealOnArrival.Value || compiler == null) return;
             if (!s_knownCompilers.Add(compiler.m_uid)) return; // already seen this compiler
+            if (IsAuthority())
+            {
+                if (ZDOMan.instance == null) return;
+                try
+                {
+                    var r = SaveHealer.DedupeZone(ZDOMan.instance, compiler.GetSector(), MergeDuplicateData.Value);
+                    foreach (var line in r.Lines) Log.LogWarning("[heal on arrival] " + line);
+                }
+                catch (Exception e)
+                {
+                    Log.LogError("Heal on arrival failed: " + e);
+                }
+                return;
+            }
             long key = Compilers.ZoneKey(compiler.GetSector());
             if (s_pendingZoneKeys.Add(key)) s_pendingZones.Enqueue(key);
         }
@@ -191,7 +219,7 @@ namespace DeepNorthTerrainFix
             if (ZDOMan.instance == null || ZNet.instance == null) return;
             bool authority = IsAuthority();
 
-            // Arrival checks: a few zones per frame, from the sector lists (cheap).
+            // Arrival checks queued by clients: a few zones per frame, from the sector lists (cheap).
             if (s_pendingZones.Count > 0 && (authority || ClientMayHeal.Value))
             {
                 int budget = 4;

@@ -302,7 +302,34 @@ namespace DeepNorthTerrainFix
                 if (IsServer) zdo.SetOwnerInternal(ZDOMan.GetSessionID());
                 else zdo.SetOwner(ZDOMan.GetSessionID());
             }
+            // ZDOMan.Update forwards new ZDOs to every peer (SendZDOToPeers2) BEFORE it processes the destroy list
+            // (SendDestroyed). Without this, a duplicate removed here still reaches every other player for one
+            // frame, and an unmodded player who owns the real compiler destroys it when that duplicate wakes up.
+            if (IsServer) SendSuppressed.Add(zdo.m_uid);
             ZDOMan.instance.DestroyZDO(zdo);
+        }
+
+        /// <summary>Server: ZDOs the healer has queued for destruction that must not be forwarded to any peer meanwhile.</summary>
+        public static readonly HashSet<ZDOID> SendSuppressed = new HashSet<ZDOID>();
+
+        public static void ResetSession() => SendSuppressed.Clear();
+
+        /// <summary>
+        /// Server: true when destroying this compiler would delete terrain data no other compiler in the zone holds,
+        /// i.e. it has data and no other compiler in its zone is at least as rich. Such a destroy request from a client
+        /// is always the vanilla Awake fight on an unmodded game and must be refused.
+        /// </summary>
+        public static bool IsProtected(ZDOMan man, ZDO zdo)
+        {
+            if (zdo == null || zdo.GetPrefab() != PrefabHash) return false;
+            long mine = Richness(zdo);
+            if (mine <= 0) return false;
+            foreach (var other in InZone(man, zdo.GetSector()))
+            {
+                if (other == zdo || other.m_uid == zdo.m_uid) continue;
+                if (Richness(other) >= mine) return false;
+            }
+            return true;
         }
 
         /// <summary>Raw access to the per-sector ZDO lists (for sliced sweeps).</summary>

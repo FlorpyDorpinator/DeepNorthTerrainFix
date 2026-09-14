@@ -23,7 +23,7 @@ namespace DeepNorthTerrainFix
     {
         public const string GUID = "FlorpyDorp.DeepNorthTerrainFix";
         public const string NAME = "DeepNorthTerrainFix";
-        public const string VERSION = "1.2.0";
+        public const string VERSION = "1.2.1";
         public const string AUTHOR = "FlorpyDorp";
 
         internal static ManualLogSource Log;
@@ -118,6 +118,10 @@ namespace DeepNorthTerrainFix
             SnowWriteStep = Config.Bind("Snow", "SnowWriteStep", 0.05f,
                 new ConfigDescription("Minimum change in snow buildup (0..1) before it is synced. Visuals only change at 0.25.", new AcceptableValueRange<float>(0.01f, 0.25f)));
 
+            ConfigVersion = Config.Bind("Internal", "ConfigVersion", 0,
+                "Used to migrate settings when the mod updates. Do not edit.");
+            MigrateConfig();
+
             _harmony = new Harmony(GUID);
             _harmony.PatchAll(typeof(Plugin).Assembly);
             Log.LogInfo($"{NAME} {VERSION} loaded ({_harmony.GetPatchedMethods().CountItems()} methods patched).");
@@ -126,6 +130,36 @@ namespace DeepNorthTerrainFix
         private void OnDestroy()
         {
             _harmony?.UnpatchSelf();
+        }
+
+        // ---------------------------------------------------------------- config migration
+
+        internal static ConfigEntry<int> ConfigVersion;
+
+        /// <summary>Bump when an existing config value must change meaning or default for everyone.</summary>
+        private const int CurrentConfigVersion = 2;
+
+        /// <summary>
+        /// BepInEx keeps whatever is already in the .cfg, so a changed default never reaches an existing install.
+        /// This runs once per config-version step and rewrites the entries that must change, then records the version
+        /// so a value the admin sets afterwards is respected.
+        /// </summary>
+        private void MigrateConfig()
+        {
+            int have = ConfigVersion.Value;
+            if (have >= CurrentConfigVersion) return;
+            bool changed = false;
+            if (have < 2 && PatchNetworkBudget.Value)
+            {
+                // 1.1.x default was true. It raises the send rate for every player and can delay hits / rubber-band
+                // anyone with a weak upload, so 1.2.0 turned it off by default. Reset it once; set it back if you want it.
+                PatchNetworkBudget.Value = false;
+                changed = true;
+                Log.LogWarning("Config migrated from a pre-1.2.0 file: Network.PatchNetworkBudget reset to false (it can delay hits for players with weak uploads). Set it to true in the config file if you really want it; this reset only happens once.");
+            }
+            ConfigVersion.Value = CurrentConfigVersion;
+            Config.Save();
+            if (!changed) Log.LogInfo($"Config version set to {CurrentConfigVersion}.");
         }
 
         // ---------------------------------------------------------------- healing entry points

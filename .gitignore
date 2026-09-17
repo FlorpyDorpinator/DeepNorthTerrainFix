@@ -42,3 +42,7 @@ release/FlorpyDorp-NetFixes-*
 dist/IndoorStormFix.dll
 dist/NetFixes.dll
 .vscode/
+
+NoCheatedTag/
+release/FlorpyDorp-NoCheatedTag-*
+dist/NoCheatedTag.dll

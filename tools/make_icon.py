@@ -73,7 +73,35 @@ def net():
         rows.append(row)
     return rows
 
+def tag():
+    """A price tag with a check mark: the item is clean."""
+    top, bottom = (40, 28, 58), (88, 52, 96)
+    rows = []
+    for y in range(H):
+        base = lerp(top, bottom, y / H)
+        row = []
+        for x in range(W):
+            c = base
+            # tag body: rounded rectangle with a pointed left end
+            inside = 96 <= x <= 216 and 78 <= y <= 178
+            point = 48 <= x < 96 and abs(y - 128) <= (x - 48) * 1.04
+            if inside or point:
+                c = (236, 226, 200)
+                if (x in range(96, 217) and y in (78, 178)) or x == 216: c = (150, 130, 96)
+            # string hole
+            if math.hypot(x - 84, y - 128) < 9: c = base
+            elif math.hypot(x - 84, y - 128) < 12: c = (150, 130, 96)
+            # check mark on the tag
+            def seg(ax, ay, bx, by):
+                vx, vy = bx - ax, by - ay
+                t = max(0, min(1, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy)))
+                return math.hypot(x - (ax + vx * t), y - (ay + vy * t))
+            if inside and (seg(122, 130, 148, 156) < 7 or seg(148, 156, 196, 100) < 7): c = (46, 160, 90)
+            row.extend(c)
+        rows.append(row)
+    return rows
+
 if __name__ == '__main__':
     out, style = sys.argv[1], sys.argv[2]
-    png(out, storm() if style == 'storm' else net())
+    png(out, {'storm': storm, 'net': net, 'tag': tag}[style]())
     print('wrote', out)

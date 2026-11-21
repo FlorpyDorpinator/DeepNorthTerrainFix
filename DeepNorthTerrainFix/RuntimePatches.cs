@@ -339,10 +339,10 @@ namespace DeepNorthTerrainFix
     }
 
     // ------------------------------------------------------------------------------------------------
-    // 3. TerrainComp.GetNeighbor: no spread into unowned compilers, no double-applied border strokes
+    // 3. TerrainComp.TryGetNeighbor: no spread into unowned compilers, no double-applied border strokes
     // ------------------------------------------------------------------------------------------------
-    [HarmonyPatch(typeof(TerrainComp), "GetNeighbor")]
-    internal static class TerrainComp_GetNeighbor_Patch
+    [HarmonyPatch(typeof(TerrainComp), "TryGetNeighbor")]
+    internal static class TerrainComp_TryGetNeighbor_Patch
     {
         private static void Postfix(Vector3 worldPos, float radius, ref TerrainComp __result)
         {
